@@ -27,8 +27,8 @@ curl -w "@curl-timing.txt" -o /dev/null -s "http://site-to-test
 ```bash
 # clear the cache - this is optional
 go clean -testcache
-GOCACHE=off go test config.go config_test.go schema.go simple-redis.go simple-redis_test.go -coverprofile cover.out
-go tool cover -html=cover.out -o cover.html
+GOCACHE=off go test -v config.go config_test.go schema.go handlers.go middleware.go middleware_test.go handlers_test.go -coverprofile tests/results/cover.out
+go tool cover -html=tests/results/cover.out -o tests/results/cover.html
 
 
 ```
