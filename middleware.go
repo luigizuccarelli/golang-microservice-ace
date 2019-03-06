@@ -1,7 +1,7 @@
 package main
 
 import (
-	"crypto/tls"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func LoginData(body []byte) (string, error) {
+func (c Connectors) LoginData(body []byte) (string, error) {
 
 	logger.Trace("In function LoginData")
 
@@ -24,6 +24,9 @@ func LoginData(body []byte) (string, error) {
 		logger.Error(fmt.Sprintf("LoginData %v\n", e.Error()))
 		return apitoken, e
 	}
+	if j["username"] == nil || j["password"] == nil {
+		return apitoken, errors.New("username and/or password field is nil")
+	}
 	logger.Debug(fmt.Sprintf("json data %v\n", j))
 
 	// use this for cors
@@ -33,25 +36,24 @@ func LoginData(body []byte) (string, error) {
 
 	// lets first check in the in-memory cache
 	key := j["username"].(string) + ":" + j["password"].(string)
-	val, err := redisdb.Get("hash").Result()
-
+	//h := sha256.New()
+	hashkey := sha256.Sum256([]byte(key))
+	val, err := c.Get("hash")
+	var newval [32]byte
+	copy(newval[:], []byte(val))
+	logger.Debug(fmt.Sprintf("Keys %x : %x", string(hashkey[:32]), val))
 	if val == "" || err != nil {
 		logger.Info(fmt.Sprintf("Key not found in cache %s", key))
-		// make the middleware call
-		// set up http object
-		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-		client := &http.Client{Transport: tr}
 
 		req, err := http.NewRequest("GET", config.Url+"/username/"+j["username"].(string)+"/password/"+j["password"].(string), nil)
 		req.Header.Set("token", config.Token)
-		resp, err := client.Do(req)
-		if err != nil {
+		resp, err := c.Http.Do(req)
+		logger.Info(fmt.Sprintf("Connected to host %s", config.Url))
+		//logger.Info(fmt.Sprintf("Response object %v", resp))
+		if err != nil || resp.StatusCode != 200 {
 			logger.Error(fmt.Sprintf("%s ", err.Error()))
 			return apitoken, err
 		}
-		logger.Info(fmt.Sprintf("Connected to host %s", config.Url))
 		defer resp.Body.Close()
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
@@ -61,34 +63,37 @@ func LoginData(body []byte) (string, error) {
 		logger.Trace(fmt.Sprintf("Response from MW %s", string(body)))
 
 		errs := json.Unmarshal(body, &schema)
-		if err != nil {
+		if errs != nil {
 			logger.Error(fmt.Sprintf("%s ", errs.Error()))
 			return apitoken, errs
 		}
 		logger.Debug(fmt.Sprintf("Schema Data %v ", schema))
 
-		all, _ := json.MarshalIndent(schema, "", "	")
-		err = redisdb.Set("all", all, time.Hour).Err()
-		err = redisdb.Set("hash", key, time.Hour).Err()
+		//all, _ := json.MarshalIndent(schema, "", "	")
+		_, err = c.Set("all", string(body), time.Hour)
+		_, err = c.Set("hash", string(hashkey[:32]), time.Hour)
+		_, err = c.Set(schema.Accounts[0].CustomerNumber, string(body), time.Hour)
+		_, err = c.Set(schema.PostalAddresses[0].EmailAddress.EmailAddress, string(body), time.Hour)
+		logger.Info(fmt.Sprintf("CustomerNumber %s", schema.Accounts[0].CustomerNumber))
 
 		if err != nil {
 			return apitoken, err
 		}
 
 		apitoken = xid.New().String()
-		err = redisdb.Set("apitoken", apitoken, time.Hour).Err()
-	} else if val != key {
+		_, err = c.Set("apitoken", apitoken, time.Hour)
+	} else if newval != hashkey {
 		logger.Error(fmt.Sprintf("Hash token's don't match %s != %s", val, key))
 		return apitoken, errors.New("hash token does not match")
-	} else if val == key {
+	} else if hashkey == newval {
 		logger.Info(fmt.Sprintf("Key found in cache %s", key))
 		apitoken = xid.New().String()
-		err = redisdb.Set("apitoken", apitoken, time.Hour).Err()
+		_, err = c.Set("apitoken", apitoken, time.Hour)
 	}
 	return apitoken, nil
 }
 
-func AllData(b []byte) ([]byte, error) {
+func (c Connectors) AllData(b []byte) ([]byte, error) {
 
 	logger.Trace("In function AllData")
 
@@ -104,14 +109,39 @@ func AllData(b []byte) ([]byte, error) {
 	logger.Debug(fmt.Sprintf("json data %v\n", j))
 
 	// lets first check in the in-memory cache
+	if j["apitoken"] == nil {
+		return subs, errors.New("Invalid or empty api token")
+	}
 	apitoken := j["apitoken"].(string)
-	val, err := redisdb.Get("apitoken").Result()
+	val, err := c.Get("apitoken")
+	logger.Info(fmt.Sprintf("Apitoken from cache %s : from req object %s", val, apitoken))
 	if apitoken != val || err != nil {
 		return subs, err
 	} else {
-		data, e = redisdb.Get("all").Result()
+		data, e = c.Get("all")
 		if e != nil {
 			return subs, e
+		}
+	}
+	subs = []byte(data)
+	return subs, nil
+}
+
+func (c Connectors) AllDataByCustomerNumber(customernumber string) ([]byte, error) {
+
+	logger.Trace("In function AllDataByCustomerNumber")
+
+	var subs []byte
+	var data string
+
+	// lets first check in the in-memory cache
+	val, err := c.Get(customernumber)
+	if val == "" {
+		return subs, errors.New(fmt.Sprintf("CustomerNumber %s not found ", customernumber))
+	} else {
+		data, err = c.Get("all")
+		if err != nil {
+			return subs, err
 		}
 	}
 	subs = []byte(data)

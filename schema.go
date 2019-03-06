@@ -2,23 +2,7 @@ package main
 
 import (
 	"gopkg.in/mgo.v2/bson"
-	"strings"
-	"time"
 )
-
-type CustomTime struct {
-	time.Time
-}
-
-func (ct *CustomTime) UnmarshalJSON(b []byte) (err error) {
-	s := strings.Trim(string(b), "\"")
-	if s == "null" {
-		ct.Time = time.Time{}
-		return
-	}
-	ct.Time, err = time.Parse("2006-01-02 15:04", s)
-	return
-}
 
 type Account struct {
 	AuthStatus     string `json: "authStatus"`

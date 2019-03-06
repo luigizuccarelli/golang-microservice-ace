@@ -2,46 +2,47 @@ package main
 
 import (
 	"fmt"
-	"github.com/go-redis/redis"
 	"github.com/gorilla/mux"
 	"github.com/microlib/simple"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 )
 
 var (
-	logger  simple.Logger
-	config  Config
-	redisdb *redis.Client
+	logger     simple.Logger
+	config     Config
+	connectors Clients
 )
 
 func startHttpServer(cfg Config) *http.Server {
 
 	config = cfg
 
-	logger.Debug(fmt.Sprintf("Config in startServer %v ", config))
-	srv := &http.Server{Addr: ":" + config.Port}
+	logger.Debug(fmt.Sprintf("Config in startServer %v ", cfg))
+	srv := &http.Server{Addr: ":" + cfg.Port}
 
 	r := mux.NewRouter()
-	r.HandleFunc("/sys/info/isalive", IsAlive).Methods("GET")
-	r.HandleFunc("/login", MiddlewareLogin).Methods("POST")
-	r.HandleFunc("/alldata", MiddlewareData).Methods("POST")
+	r.HandleFunc("/v1/sys/info/isalive", IsAlive).Methods("GET")
+	r.HandleFunc("/v1/login", MiddlewareLogin).Methods("POST")
+	r.HandleFunc("/v1/alldata", MiddlewareData).Methods("POST")
+	r.HandleFunc("/v2/postaladdress/customernumber/{customerNumber}", MiddlewareCustomerNumberData).Methods("GET")
 	http.Handle("/", r)
 
-	// connect to redis
-	redisdb = redis.NewClient(&redis.Options{
-		Addr:         config.RedisDB.Host + ":" + config.RedisDB.Port,
-		DialTimeout:  10 * time.Second,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		PoolSize:     10,
-		PoolTimeout:  30 * time.Second,
-		Password:     "",
-		DB:           0,
-	})
+	connectionData := ConnectionData{
+		Name:          "RealConnector",
+		RedisHost:     cfg.RedisDB.Host,
+		RedisPort:     cfg.RedisDB.Port,
+		HttpUrl:       cfg.Url,
+		MongoHost:     cfg.MongoDB.Host,
+		MongoPort:     cfg.MongoDB.Port,
+		MongoDatabase: cfg.MongoDB.DatabaseName,
+		MongoUser:     cfg.MongoDB.User,
+		MongoPassword: cfg.MongoDB.Password,
+	}
+
+	connectors = NewClientConnectors(connectionData)
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
