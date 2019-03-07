@@ -29,7 +29,8 @@ curl -w "@curl-timing.txt" -o /dev/null -s "http://site-to-test
 go clean -testcache
 GOCACHE=off go test -v config.go config_test.go schema.go handlers.go middleware.go middleware_test.go handlers_test.go -coverprofile tests/results/cover.out
 go tool cover -html=tests/results/cover.out -o tests/results/cover.html
-
+# run sonarqube scanner (assuming sonarqube server is running)
+ ~/Programs/sonar-scanner-3.3.0.1492-linux/bin/sonar-scanner  -Dsonar.projectKey=ace-microservice   -Dsonar.sources=.   -Dsonar.host.url=http://localhost:9000   -Dsonar.login=3b172e408d048820bc6a633b1c3f0097523e89f4 -Dsonar.go.coverage.reportPaths=tests/results/cover.out -Dsonar.exclusions=vendor/**,*_test.go,main.go,connectors.go,tests/**
 
 ```
 ## Testing container 

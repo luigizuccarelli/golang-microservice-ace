@@ -33,7 +33,7 @@ type Config struct {
 // Mongodb structure - the base config to connect to mongodb
 type Mongodb struct {
 	Host           string `json:"host"`
-	Port           string `json:"port"`
+	Port           string `json:"port-mongo"`
 	DatabaseName   string `json:"name"`
 	User           string `json:"user"`
 	Password       string `json:"pwd"`
