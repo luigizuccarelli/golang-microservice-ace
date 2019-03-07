@@ -3,7 +3,7 @@
     "port": "9000",
     "level": "trace",
     "url": "https://servicegateway.agora-inc.com/middleware/data",
-    "token": "MYK*$#GTE457yRH45yhbes%",
+    "token": "",
     "mongodb" : {
       "host": "",
       "port": "",
